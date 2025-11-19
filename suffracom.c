@@ -2,13 +2,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
 #include "include/suffracom.h"
 #include "include/gui.h"
 
 #define WIN_TITLE "SUFFRACOM"
 #define WIN_WIDTH 1280 
 #define WIN_HEIGHT 724 
-#define VERSION "version: 1.0-beta"
+#define VERSION "version: 1.0"
 
 #define MAX_CANDIDATE 50
 #define MAX_POSITION 50
@@ -24,23 +25,12 @@ gui_t gui_state;
 static text_box_t title, mini_title, wstrtxt;	
 static text_box_t desc[2];
 
-
-/*
-static text_box_t start_button_text;
-static text_box_t create_server_button_text;
-tatic text_box_t quit_button_text;
-static text_box_t version;
-*/
-// voting texts
-//static text_box_t candidate_button_text;
-
 static bool ip_prompt_active = false;
 
 static button_t start_button;
 static button_t create_server_button;
 static button_t quit_button;
 
-//static candidate_queue_t candq;
 bool text_input_state;
 
 // voting buttons
@@ -66,6 +56,8 @@ typedef struct _saved_files
 typedef struct _menu
 {
 	text_box_t texts[5];
+	text_box_t candidate_name[MAX_CANDIDATE];
+	text_box_t position[MAX_POSITION];
 	button_t buttons[3];	
 	input_text_t ipaddr;
 	saved_files_t saved_files;
@@ -76,8 +68,22 @@ static menu_t m;
 
 typedef struct _admin
 {
-	
+	text_box_t label[3];	
+	button_t create[2];
+	button_t remove[2];
+	button_t modify[2];
+	button_t add_photo;
+	button_t file, edit, help;
+	button_t file_buttons[5];
+	bool tool_state[4];
+	input_text_t input[3];
+	bool input_state[3];
+	int in;
+	int count;
+	bool pos_state;
 } admin_t;
+
+static admin_t a;
 
 typedef struct _vote
 {
@@ -109,7 +115,6 @@ typedef enum _screen_enum
 	SURVEY = 4,
 } screen_enum;
 
-
 // function declarations
 static void ip_address_prompt(void);
 static void menu_init(void); 
@@ -129,6 +134,11 @@ static void activate_cand(void);
 static void candidate_add_vote(void);
 static void admin_init(void);
 static void admin(void);
+static void close_admin(void);
+static void add_position_button(void);
+static void add_position(void);
+static void select_position_button(void);
+static void file_state_button(void);
 static void generate_identity_code(void);
 static void confirm_vote(void);
 static void pos_votes(void);
@@ -145,22 +155,16 @@ suffracom_main(		int argc,
 {
 	// initialization
 	gui_initialize(WIN_TITLE, WIN_WIDTH, WIN_HEIGHT);
+
 	atexit(gui_cleanup);
 	screen = MAIN;
 	menu_init();	
 	
-	vote_screen_init();
+//	vote_screen_init();
 
 
 	gui_main_loop(&gui_state, event_func, main_frame);
 
-
-/*
-	vote_screen_init();
-	gui_main_loop(&gui_state, vote_screen);
-
-*/
-	admin_init();
 	gui_stop_input_text();
 	exit(EXIT_SUCCESS);
 }
@@ -168,9 +172,12 @@ suffracom_main(		int argc,
 static void 
 generate_identity_code(void)
 {
-	int identity_code;
+	int id_code;
 
 	srand(time(0));	
+
+
+	
 }
 
 static void 
@@ -178,15 +185,10 @@ menu_init(void)
 {
 
 	m.texts[0] = gui_create_text(WIN_TITLE, LIBERATIONSANS_BOLD_ITALIC_FONT, 50, 0, 150, 0, 255, (WIN_WIDTH / 2) - 150, 120);
-	m.texts[1] = gui_create_text(welcome_str, DEFAULT_FONT, 20, 0, 0, 0, 255, (WIN_WIDTH / 2) - 200, 170); 
-	//desc[0] = gui_create_text(main_desc, DEFAULT_FONT, 20, 0, 0, 0, 255, (WIN_WIDTH / 2) - 250, 190);
-	//desc[1] = gui_create_text(second_desc, DEFAULT_FONT, 20, 0, 0, 0, 255, (WIN_WIDTH / 2) - 280, 210);
+	m.texts[1] = gui_create_text(welcome_str, DEFAULT_FONT, 20, 0, 0, 0, 255, (WIN_WIDTH / 2) - 170, 200); 
 	m.texts[2] = gui_create_text(VERSION, DEFAULT_FONT, 15, 0, 0, 0, 255, 10, 700);
-
 	m.buttons[0] = gui_create_button(0, 155, 0, 255, (WIN_WIDTH / 2) - 205, 500, 500, 30, "ENTER SERVER", ip_address_prompt); 
-
-	m.buttons[1] = gui_create_button(0, 155, 0, 255, (WIN_WIDTH / 2) - 205, 550, 500, 30, "CREATE SERVER", NULL);
-
+	m.buttons[1] = gui_create_button(0, 155, 0, 255, (WIN_WIDTH / 2) - 205, 550, 500, 30, "CREATE SERVER", admin_init);
 	m.buttons[2]  = gui_create_button(155, 0, 0, 255, (WIN_WIDTH / 2) - 205, 600, 500, 30, "QUIT", exit_pointer);
 	m.ipaddr = gui_create_input_text("Enter IP Address", DEFAULT_FONT, 13, 255, 255, 255, 255, (WIN_WIDTH - 400) / 2, (WIN_HEIGHT - 120) / 2, 500, 30);
 }
@@ -214,7 +216,16 @@ event_func(void)
 	gui_event_mouse_motion(&gui_state);
 	gui_event_keyboard_down(&gui_state);
 	gui_event_keyboard_up(&gui_state);
-	gui_event_text_input(&gui_state, ip_prompt_active, &text_input_state);
+	
+	if (screen == MAIN)
+	{
+		gui_event_text_input(&gui_state, ip_prompt_active, &text_input_state);
+	}
+	
+	if (screen == ADMIN)
+	{
+		gui_event_text_input(&gui_state, a.input_state[0], &text_input_state);
+	}
 }
 
 static bool status;
@@ -226,7 +237,6 @@ top_and_bottom_bars(void)
 	gui_draw_rect(true, 0, 100, 0, 200, 0, WIN_HEIGHT - 750, WIN_WIDTH, 70);
 }
 	
-int _i = 0;
 static void 
 ip_address_prompt(void)
 {
@@ -234,6 +244,8 @@ ip_address_prompt(void)
 	text_input_state = false;		
 	gui_state.buf[0] = '\0';
 }
+
+int outer_button_gap = 100;
 
 static void 
 main_frame(void)
@@ -248,17 +260,23 @@ main_frame(void)
 			menu();	
 			if (ip_prompt_active)
 			{
-				gui_render_input_text(&gui_state, m.ipaddr, ip_prompt_active);		
+				gui_render_input_text(&gui_state, &m.ipaddr, ip_prompt_active);		
 			}
 			
 			if (ip_prompt_active && text_input_state)
 			{
 				if ((strcmp(gui_state.buf, "TESTME")) == 0) 
 				{
+					vote_screen_init();
 					screen = VOTING;
 					ip_prompt_active = false;
 					text_input_state = false;
 				}		
+
+				else
+				{
+					text_input_state = false;	
+				}
 			}
 
 			break;
@@ -267,10 +285,20 @@ main_frame(void)
 			
 			break;
 		case ADMIN:
+			admin();
+			
+			if (a.input_state[0] == true && text_input_state == true)
+			{
+				add_position(); 
+				a.input_state[0] = false;
+				text_input_state = false;
+			}
+
+
 			break;
 		case DATA:
-			
 			data();
+
 			
 			break;
 
@@ -279,7 +307,7 @@ main_frame(void)
 	}
 }
 
-int outer_button_gap = 100;
+
 
 struct position 
 create_position(char *title)
@@ -427,7 +455,6 @@ candidate_add_vote(void)
 						pos[v.in].queue[k].votes--;
 						printf("%s: %d\n", pos[p].queue[k].name, pos[p].queue[k].votes);
 					}
-	
 				}
 			
 				pos[p].queue[c].selected = true;
@@ -476,7 +503,6 @@ confirm_vote(void)
 
 int y = 0;
 char buffer[20];
-
 
 static void
 data_init(void)
@@ -549,7 +575,6 @@ static void
 server_browser_init(void)
 {
 	m.server_browser.button = gui_create_button(0, 155, 0, 255, (WIN_WIDTH / 2) - 205, 550, 500, 30, "TEST SERVER", NULL);
-	
 }
 
 static void
@@ -561,7 +586,7 @@ server_browser(void)
 static void
 enter_pass(void)
 {
-		
+			
 }
 
 text_box_t saved_files_text;
@@ -571,13 +596,151 @@ button_t delete_files_button;
 static void
 admin_init(void)
 {
-	// admin variables
+	char *add = "ADD +";
+	char *remove = "REMOVE -";
+	char *modify = "MODIFY";
+
+	a.in = 0;
+	//pos[0].gap = 100;
+	//outer_button_gap = 100;
+	a.count = 0;
+
+	a.label[0] = gui_create_text("POSITION" , DEFAULT_FONT, 20, 0, 0, 0, 255, (WIN_WIDTH / 2) - 550, (WIN_HEIGHT / 2) - 300);
+	a.label[1] = gui_create_text("CANDIDATE" , DEFAULT_FONT, 20, 0, 0, 0, 255, (WIN_WIDTH / 2) - 100, (WIN_HEIGHT / 2) - 300);
+
+	a.create[0] = gui_create_button(0, 155, 0, 255, (WIN_WIDTH / 2) - 640, (WIN_HEIGHT / 2) + 302, 110, 30, add, add_position_button);
+	a.create[1] = gui_create_button(0, 155, 0, 255, (WIN_WIDTH / 2) - 300, (WIN_HEIGHT / 2) + 302, 200, 30, add, add_candidate_button);
+
+	a.remove[0] = gui_create_button(155, 0, 0, 255, ((WIN_WIDTH / 2) - 640) + 110, (WIN_HEIGHT / 2) + 302, 110, 30, remove, NULL);
+	a.remove[1] = gui_create_button(155, 0, 0, 255, ((WIN_WIDTH / 2) - 300) + 200, (WIN_HEIGHT / 2) + 302, 200, 30, remove, NULL);
+	
+	a.modify[0] = gui_create_button(255, 165, 0, 255, (((WIN_WIDTH / 2) - 640) + 110) + 110, (WIN_HEIGHT / 2) + 302, 120, 30, modify, NULL);
+	a.modify[1] = gui_create_button(255, 165, 0, 255, (((WIN_WIDTH / 2) - 300) + 200) + 200, (WIN_HEIGHT / 2) + 302, 140, 30, modify, NULL);
+
+	a.file = gui_create_button(0, 222, 0, 255, (WIN_WIDTH / 2) - 650, (WIN_HEIGHT / 2) - 360, 120, 42, "FILE", file_state_button);
+	a.edit = gui_create_button(0, 222, 0, 255, ((WIN_WIDTH / 2) - 650) + 122, (WIN_HEIGHT / 2) - 360, 120, 42, "EDIT", NULL);
+	a.help = gui_create_button(0, 222, 0, 255, (((WIN_WIDTH / 2) - 650) + 122) + 122, (WIN_HEIGHT / 2) - 360, 120, 42, "HELP", NULL);
+
+	a.file_buttons[0] = gui_create_button(255, 165, 0, 255, (WIN_WIDTH / 2) - 622, (WIN_HEIGHT / 2) - 320, 140, 30, "Open", NULL);
+	a.file_buttons[1] = gui_create_button(255, 165, 0, 255, (WIN_WIDTH / 2) - 622, ((WIN_HEIGHT / 2) - 320) + 45, 140, 30, "Save", NULL);
+	a.file_buttons[2] = gui_create_button(255, 165, 0, 255, (WIN_WIDTH / 2) - 622, (((WIN_HEIGHT / 2) - 320) + 45) + 45, 140, 30, "Save as", NULL); 
+	a.file_buttons[3] = gui_create_button(255, 165, 0, 255, (WIN_WIDTH / 2) - 622, ((((WIN_HEIGHT / 2) - 320) + 45) + 45) + 45, 140, 30, "Close", close_admin);
+
+	screen = ADMIN;
+
+	a.input[0] = gui_create_input_text("Enter position title", DEFAULT_FONT, 13, 255, 255, 255, 255, (WIN_WIDTH / 2) - 250, WIN_HEIGHT / 2, 500, 30);
 }
 
 static void
 admin(void)
 {
+	gui_draw_rect(true, 0, 100, 0, 200, (WIN_WIDTH / 2) - 300, (WIN_HEIGHT / 2) - 320, (WIN_WIDTH / 2) - 100, WIN_HEIGHT);
+	gui_render_text(mini_title);
+	gui_render_text(m.texts[2]);
+
+	for (int i = 0; i < 2; i++)
+	{
+		gui_render_text(a.label[i]);
+		gui_render_button(gui_state, &a.create[i]);
+		gui_render_button(gui_state, &a.remove[i]);
+		gui_render_button(gui_state, &a.modify[i]);
+	}
+	
+	gui_render_button(gui_state, &a.file);
+	gui_render_button(gui_state, &a.edit);
+	gui_render_button(gui_state, &a.help);
+
+	for (int i = 0; i < a.in; i++)
+	{
+		gui_render_button(gui_state, &pos[i].button);
 		
+		
+	}
+
+	if (a.tool_state[0] == true)
+	{
+
+		gui_draw_rect(a.tool_state[0], 20, 20, 20, 150, (WIN_WIDTH / 2) - 655, (WIN_HEIGHT / 2) - 320, 200, (WIN_HEIGHT / 2) - 100);
+		for (int i = 0; i < 4; i++)
+		{
+			gui_render_button(gui_state, &a.file_buttons[i]);
+		}
+	} 
+
+	if (gui_state.mouse.button[SDL_BUTTON_RIGHT])
+	{
+		a.tool_state[0] = false;
+	}
+
+	if (a.input_state[0])
+	{
+		gui_render_input_text(&gui_state, &a.input[0], a.input_state[0]);
+	}	
+	
+}
+
+static void
+close_admin(void)
+{
+	menu_init();
+	screen = MAIN;
+}
+
+static void
+select_position(void)
+{
+	for (int i = 0; i < a.count; i++)
+	{
+		button_t *btn = &pos[i].button;
+		
+		if (btn->clicked)
+		{
+			for (int k = 0; k < a.count; k++)
+			{
+				pos[k].current = false;
+				pos[k].button.hover_color = (SDL_Color) {0, 155, 0, 255};
+				pos[k].button.main_color = (SDL_Color) {0, 100, 0, 255};
+			}
+
+			pos[i].current = true;
+			
+			if (pos[i].current == true)
+			{
+				printf("%s\n", pos[i].title);
+				pos[i].button.main_color = (SDL_Color) {0, 155, 0, 255};	
+			}
+		}
+	}
+}
+
+static void
+add_position_button(void)
+{
+	a.input_state[0] = true;
+	text_input_state = false;
+	gui_state.buf[0] = '\0';
+}
+
+static void
+add_position(void)
+{
+	pos[a.in] = create_position(gui_state.buf);
+	a.in++;	
+}
+
+static void
+add_candidate_button(void)
+{
+	if (a.pos_state == true)
+	{
+				
+	}
+}
+
+static void
+file_state_button(void)
+{
+	a.tool_state[0] = true;	
 }
 
 static void
@@ -597,4 +760,3 @@ static void exit_pointer(void)
 	printf("Quiting...\n");
 	exit(EXIT_SUCCESS);
 }
-

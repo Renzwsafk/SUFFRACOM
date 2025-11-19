@@ -116,7 +116,7 @@ void gui_render_text(text_box_t);
 button_t gui_create_button(int,int,int,int,int,int,int,int,char*,void(*function)(void));
 void gui_render_button(gui_t,button_t*);
 input_text_t gui_create_input_text(char*,char*,int,int,int,int,int,int,int,int,int);
-void gui_render_input_text(gui_t*,input_text_t,bool);
+void gui_render_input_text(gui_t*,input_text_t*,bool);
 void gui_stop_input_text(void);
 void gui_create_scroll_box(int r, int g, int b, int a);
 // end

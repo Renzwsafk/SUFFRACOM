@@ -302,21 +302,21 @@ input_text_t gui_create_input_text(char *label, char *font_loc, int font_size, i
 
 	
 	//gui_draw_rect(_p.color.r, _p.color.g, _p.color.b, _p.color.a, _p.rect.x, _p.rect.y, _p.rect.w, _p.rect.h);
-void gui_render_input_text(gui_t *gui, input_text_t _p, bool activate)
+void gui_render_input_text(gui_t *gui, input_text_t *p, bool activate)
 {
 	
-	strcpy(_p.str, gui->buf);
-	gui_draw_rect(activate, 20, 20, 20, 100, _p.rect.x, _p.rect.y, _p.rect.w, _p.rect.h);
-	gui_render_text(_p.label);
-	if (strlen(_p.str) > 0)
+	strcpy(p->str, gui->buf);
+	gui_draw_rect(activate, 20, 20, 20, 100, p->rect.x, p->rect.y, p->rect.w, p->rect.h);
+	gui_render_text(p->label);
+	if (strlen(p->str) > 0)
 	{
 		
-		ERROR_EXIT((_p.surf = TTF_RenderText_Blended(_p.font, _p.str, _p.color)), "Text renderer error: failed to create surface %s\n", SDL_GetError()); 
-		ERROR_EXIT((_p.texture = SDL_CreateTextureFromSurface(renderer, _p.surf)), "Text renderer error: failed to create texture %s\n", SDL_GetError());
-		_p.text_rect = (SDL_Rect){ _p.rect.x + 5, _p.rect.y + 10, _p.surf->w, _p.surf->h };
-		SDL_RenderCopy(renderer, _p.texture, NULL, &_p.text_rect);
-		SDL_FreeSurface(_p.surf);
-		SDL_DestroyTexture(_p.texture);
+		ERROR_EXIT((p->surf = TTF_RenderText_Blended(p->font, p->str, p->color)), "Text renderer error: failed to create surface %s\n", SDL_GetError()); 
+		ERROR_EXIT((p->texture = SDL_CreateTextureFromSurface(renderer, p->surf)), "Text renderer error: failed to create texture %s\n", SDL_GetError());
+		p->text_rect = (SDL_Rect){ p->rect.x + 5, p->rect.y + 10, p->surf->w, p->surf->h };
+		SDL_RenderCopy(renderer, p->texture, NULL, &p->text_rect);
+		SDL_FreeSurface(p->surf);
+		SDL_DestroyTexture(p->texture);
 	}
 }
 
