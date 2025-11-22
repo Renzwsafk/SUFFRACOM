@@ -13,6 +13,7 @@ struct candidate
 	button_t button;
 	guitex *image;
 	int votes;
+	bool add_image;
 };
 
 struct position 
@@ -33,7 +34,7 @@ struct outer_node *set_outer_head(struct outer_node**, struct outer_node*);
 */
 
 struct position create_position(char*);
-struct candidate create_candidate(struct position*,char*,char*,guitex*);
+struct candidate create_candidate(struct position*,char*,char*,char*);
 
 //struct node *set_head(struct node**, struct node*);
 

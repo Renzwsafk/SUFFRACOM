@@ -72,6 +72,13 @@ typedef struct _input_text
 	bool status;
 } input_text_t;
 
+typedef struct _widget
+{
+	text_box_t *;
+	button_t *;
+	input_text_t *;
+} widget_t;
+
 typedef struct _gui
 {
 	button_t button;
@@ -114,7 +121,7 @@ void gui_draw_rect(bool,int,int,int,int,int,int,int,int);
 text_box_t gui_create_text(const char*,char *,int,int,int,int,int,int,int);
 void gui_render_text(text_box_t); 
 button_t gui_create_button(int,int,int,int,int,int,int,int,char*,void(*function)(void));
-void gui_render_button(gui_t,button_t*);
+void gui_render_button(gui_t*,button_t*);
 input_text_t gui_create_input_text(char*,char*,int,int,int,int,int,int,int,int,int);
 void gui_render_input_text(gui_t*,input_text_t*,bool);
 void gui_stop_input_text(void);

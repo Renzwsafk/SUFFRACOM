@@ -241,14 +241,14 @@ button_t gui_create_button(int r, int g, int b, int a, int x, int y, int w, int 
 	
 }
 
-void gui_render_button(gui_t gui, button_t *_b)
+void gui_render_button(gui_t *gui, button_t *_b)
 {
 	
 	SDL_Color current_color;	
-	_b->hover = get_mouse_position(&_b->rect, gui.mouse.pos.x, gui.mouse.pos.y);
+	_b->hover = get_mouse_position(&_b->rect, gui->mouse.pos.x, gui->mouse.pos.y);
 	if (_b->hover == true)  
 	{
-		if (gui.mouse.button[SDL_BUTTON_LEFT] == true) 
+		if (gui->mouse.button[SDL_BUTTON_LEFT] == true) 
 		{ 
 			current_color = _b->clicked_color; 
 			_b->clicked = true; 
@@ -323,6 +323,11 @@ void gui_render_input_text(gui_t *gui, input_text_t *p, bool activate)
 void gui_stop_input_text(void)
 {
 	SDL_StopTextInput();
+}
+
+widget_t gui_create_widget_box(char *title)
+{
+
 }
 
 void gui_clear(int r, int g, int b, int a)

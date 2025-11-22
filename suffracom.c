@@ -11,8 +11,8 @@
 #define WIN_HEIGHT 724 
 #define VERSION "version: 1.0"
 
-#define MAX_CANDIDATE 50
-#define MAX_POSITION 50
+#define MAX_CANDIDATE 20
+#define MAX_POSITION 20
 
 const char *welcome_str = "Secure and enhanced voting system.";
 
@@ -27,6 +27,8 @@ static text_box_t desc[2];
 
 static bool ip_prompt_active = false;
 
+static int selected_pos = -1;
+
 static button_t start_button;
 static button_t create_server_button;
 static button_t quit_button;
@@ -39,8 +41,9 @@ static button_t candidate_button;
 // structs
 typedef struct _server_browser
 {
-	button_t button;
 	text_box_t title;
+	button_t button;
+	
 //	input_box_t ipaddr;
 //	input_box_t pass;
 	bool state;
@@ -55,19 +58,20 @@ typedef struct _saved_files
 
 typedef struct _menu
 {
-	text_box_t texts[5];
-	text_box_t candidate_name[MAX_CANDIDATE];
-	text_box_t position[MAX_POSITION];
-	button_t buttons[3];	
-	input_text_t ipaddr;
 	saved_files_t saved_files;
 	server_browser_t server_browser;
+	button_t buttons[3];	
+	text_box_t texts[5];
+	input_text_t ipaddr;
+	text_box_t candidate_name[MAX_CANDIDATE];
+	text_box_t position[MAX_POSITION];
 } menu_t;
 
 static menu_t m;
 
 typedef struct _admin
 {
+	input_text_t input[3]; 
 	text_box_t label[3];	
 	button_t create[2];
 	button_t remove[2];
@@ -76,11 +80,11 @@ typedef struct _admin
 	button_t file, edit, help;
 	button_t file_buttons[5];
 	bool tool_state[4];
-	input_text_t input[3];
 	bool input_state[3];
+	bool pos_state;
 	int in;
 	int count;
-	bool pos_state;
+	
 } admin_t;
 
 static admin_t a;
@@ -106,6 +110,20 @@ typedef struct _data
 
 static data_t d;
 
+typedef struct _user
+{
+	char *username;
+	char *password;
+	int id;
+	input_text_t *username_input, *password_input; 
+	bool input_state[2];
+} user_t;
+
+typedef struct confirmation
+{
+	button_t buttons[5]
+} confirmation_t;
+
 typedef enum _screen_enum
 {
 	MAIN = 0,
@@ -120,6 +138,7 @@ static void ip_address_prompt(void);
 static void menu_init(void); 
 static void menu(void);
 static void main_frame(void);
+static void free_menu(void);
 static void event_func(void);
 static void text_func(void);
 static void exit_pointer(void);
@@ -137,7 +156,10 @@ static void admin(void);
 static void close_admin(void);
 static void add_position_button(void);
 static void add_position(void);
-static void select_position_button(void);
+static void enable_add_position(void);
+static void add_candidate_button(void);
+static void add_candidate(void);
+static void select_position(void);
 static void file_state_button(void);
 static void generate_identity_code(void);
 static void confirm_vote(void);
@@ -153,15 +175,17 @@ void
 suffracom_main(		int argc, 
 			char **argv	)
 {
+	memset(&gui_state, 0, sizeof(gui_state));
+	gui_state.buf[0] = '\0';
 	// initialization
 	gui_initialize(WIN_TITLE, WIN_WIDTH, WIN_HEIGHT);
 
 	atexit(gui_cleanup);
 	screen = MAIN;
+	mini_title = gui_create_text(WIN_TITLE, LIBERATIONSANS_BOLD_ITALIC_FONT, 20, 255, 255, 255, 255, (WIN_WIDTH / 2) - 90, 10);
 	menu_init();	
 	
 //	vote_screen_init();
-
 
 	gui_main_loop(&gui_state, event_func, main_frame);
 
@@ -172,18 +196,28 @@ suffracom_main(		int argc,
 static void 
 generate_identity_code(void)
 {
-	int id_code;
+	srand(time(NULL));		
 
-	srand(time(0));	
-
-
+	//int id_code = (rand() % 999999999999999) + 100000000000000;
+	const char *id_characters = "QWERTYUIOPASDFGHJKLZXCVBNM1234567890";
+	int length = strlen(id_characters);
 	
-}
+	char id_buffer[length + 1]; 
+
+	for (int i = 0; i < length; i++)
+	{
+		int rand_select_index = rand() % length;
+		id_buffer[i] = id_characters[rand_select_index];
+	}
+
+	id_buffer[length] = '\0';
+	
+	printf("%s\n", id_buffer);
+}	
 
 static void 
 menu_init(void)
 {
-
 	m.texts[0] = gui_create_text(WIN_TITLE, LIBERATIONSANS_BOLD_ITALIC_FONT, 50, 0, 150, 0, 255, (WIN_WIDTH / 2) - 150, 120);
 	m.texts[1] = gui_create_text(welcome_str, DEFAULT_FONT, 20, 0, 0, 0, 255, (WIN_WIDTH / 2) - 170, 200); 
 	m.texts[2] = gui_create_text(VERSION, DEFAULT_FONT, 15, 0, 0, 0, 255, 10, 700);
@@ -205,9 +239,10 @@ menu(void)
 	// statrt button
 	for (int i = 0; i < 3; i++)
 	{ 
-		gui_render_button(gui_state, &m.buttons[i]);
+		gui_render_button(&gui_state, &m.buttons[i]);
 	}
 }
+
 static void 
 event_func(void)
 {
@@ -314,8 +349,32 @@ create_position(char *title)
 {
 	struct position res;
 	res.gap = 100;
-	res.title = title;
+
+	if (title)
+	{
+		size_t n = strlen(title) + 1;
+		res.title = malloc(n);
+		if (res.title)
+			memcpy(res.title, title, n);
+		else
+		{
+			static char empty[] = "";
+			res.title = empty;
+		}
+	}
+
+	else
+	{
+		static char empty[] = "";
+		res.title = empty;
+	}
+
+	res.current = false;
+	res.queue[0].name = NULL;
+	res.queue[1].name = NULL;
+
 	v.count++;
+
 	res.button = gui_create_button(			0, 
 							155, 
 							0, 
@@ -325,8 +384,9 @@ create_position(char *title)
 							340, 
 							30, 
 							res.title, 
-							pos_votes	);
-	outer_button_gap += 45; 
+							select_position	);
+	outer_button_gap += 45;
+
 	return res;
 }
 
@@ -334,11 +394,16 @@ struct candidate
 create_candidate(	struct position *_pos,	
 			char *name,
 			char *desc,
-			guitex *image	)
+			char *image	)
 {
 	struct candidate res;
 	res.name = name;
-	res.image = image;
+
+	if (image)
+	{
+		res.image = gui_load_texture(image);
+	}
+
 	res.votes = 0;
 	res.desc_box = gui_create_text(desc, DEFAULT_FONT, 13, 0, 0, 0, 255, (WIN_WIDTH / 2) - 250, 350);
 
@@ -358,41 +423,45 @@ create_candidate(	struct position *_pos,
 }
 
 
-char *bezos_desc = "CEO, ENTREPRENEUR, BORN IN 1964, JEFFREY, JEFFREY BEZOS";
-char *elon_desc = "THIS IS ELON MUSK";
+char *bezos_desc = "Bezos was born in Albuquerque and raised in\nHouston and Miami. He Graduated from Princeton\nUniversity in 1986 to early 1994. Bezos founded Amazon \nin mid-1994 on a road trip from \nNew York City to Seattle\0";
+
+char *elon_desc = "Founder of Space X and owns Tesla and X.\nHe was born in South Africa and developed a game as\na child and co founded PayPal\n";
+
 char *chester_desc = "asdnfk;anwgfinaweiognS;NSI;NDS;ONS;OGSN;OGN;";
-char *obama_desc = "obamna pyramid";
-char *vance_desc = "go cry liberals";
-char *baldes_desc = "carlos nakalbo";
+char *obama_desc = "Obama is a president of the United\nStates for 8 years and was the first black president\nof the country.";
+char *vance_desc = "JD Vance is the current Vice\nPresident of the United States\n";
+char *baldes_desc = "carlos";
 char *kim_desc = "FIRE IN THE HOLE";
-struct position pos[4];
+struct position pos[MAX_POSITION];
 
 static void 
 vote_screen_init(void)
 {	
+	generate_identity_code();
+
 	v.in = 0, v.count = 0;
-	mini_title = gui_create_text(WIN_TITLE, LIBERATIONSANS_BOLD_ITALIC_FONT, 20, 255, 255, 255, 255, (WIN_WIDTH / 2) - 90, 10);
+	
 	v.ok = gui_create_button(0, 155, 0, 255, (WIN_WIDTH / 2) + 250, (WIN_HEIGHT / 2) + 250, 300, 30, "OK", confirm_vote);
 
 	v.texts[0] = gui_create_text("SELECT CANDIDATE", DEFAULT_FONT, 20, 0, 0, 0, 255, (WIN_WIDTH / 2) + 300, (WIN_HEIGHT / 2) - 300);
 	v.texts[1] = gui_create_text("Please enter a candidate before proceeding", DEFAULT_FONT, 20, 255, 0, 0, 255, (WIN_WIDTH / 2) + 300, (WIN_HEIGHT / 2) - 399);
 
-	pos[0] = create_position("President");
-	pos[1] = create_position("Vice President");
-	pos[2] = create_position("Secretary");
-	pos[3] = create_position("Health Officer");
+	pos[v.count] = create_position("President");
+	pos[v.count] = create_position("Vice President");
+	pos[v.count] = create_position("Secretary");
+	pos[v.count] = create_position("Health Officer");
 
-	pos[0].queue[0] = create_candidate(&pos[0], "Jeff Bezos", bezos_desc, gui_load_texture("res/gfx/bezos.jpg"));	
-	pos[0].queue[1] = create_candidate(&pos[0], "Elon Musk", elon_desc, gui_load_texture("res/gfx/Elon-Musk.jpg"));	
+	pos[0].queue[0] = create_candidate(&pos[0], "Jeff Bezos", bezos_desc, "res/gfx/bezos.jpg");	
+	pos[0].queue[1] = create_candidate(&pos[0], "Elon Musk", elon_desc, "res/gfx/Elon-Musk.jpg");	
 	
-	pos[1].queue[0] = create_candidate(&pos[1], "Chester", elon_desc, gui_load_texture("res/gfx/chester.jpg"));	
-	pos[1].queue[1] = create_candidate(&pos[1], "Obamna", obama_desc, gui_load_texture("res/gfx/obamna.jpg"));
+	pos[1].queue[0] = create_candidate(&pos[1], "Chester", elon_desc, "res/gfx/chester.jpg");	
+	pos[1].queue[1] = create_candidate(&pos[1], "Obamna", obama_desc, "res/gfx/obamna.jpg");
 
-	pos[2].queue[0] = create_candidate(&pos[2], "Chester nanaman", chester_desc, gui_load_texture("res/gfx/chester.jpg"));
-	pos[2].queue[1] = create_candidate(&pos[2], "JD Vance", vance_desc, gui_load_texture("res/gfx/vance.jpg"));
+	pos[2].queue[0] = create_candidate(&pos[2], "Chester", chester_desc, "res/gfx/chester.jpg");
+	pos[2].queue[1] = create_candidate(&pos[2], "JD Vance", vance_desc, "res/gfx/vance.jpg");
 
-	pos[3].queue[0] = create_candidate(&pos[3], "Carlota Baldes", baldes_desc, gui_load_texture("res/gfx/baldes.jpg"));
-	pos[3].queue[1] = create_candidate(&pos[3], "Green kim", kim_desc, gui_load_texture("res/gfx/kim.jpg"));
+	pos[3].queue[0] = create_candidate(&pos[3], "Carlos", baldes_desc, "res/gfx/baldes.jpg");
+	pos[3].queue[1] = create_candidate(&pos[3], "Kim", kim_desc, "res/gfx/kim.jpg");
 
 	if (v.finish) data_init();
 }
@@ -406,12 +475,12 @@ vote_screen(void)
 	top_and_bottom_bars();
 	gui_render_text(m.texts[2]);
 	gui_render_text(mini_title);
-	gui_render_button(gui_state, &v.ok);
+	gui_render_button(&gui_state, &v.ok);
 	gui_draw_rect(true, 0, 100, 0, 200, (WIN_WIDTH / 2) - 300, (WIN_HEIGHT / 2) - 320, (WIN_WIDTH / 2) - 100, WIN_HEIGHT);
 
 	for (int j = 0; j < v.count; j++)
 	{
-		gui_render_button(gui_state, &pos[j].button);
+		gui_render_button(&gui_state, &pos[j].button);
 	}	
 
 	gui_render_text(v.texts[0]);
@@ -422,12 +491,15 @@ vote_screen(void)
 		 
 		for (int i = 0; i < 2; i++)
 		{
-			gui_render_button(gui_state, &pos[v.in].queue[i].button);
+			gui_render_button(&gui_state, &pos[v.in].queue[i].button);
 
 			if (pos[v.in].queue[i].button.hover)
 			{
 				gui_render_text(pos[v.in].queue[i].desc_box);
-				blit(pos[v.in].queue[i].image, (WIN_WIDTH / 2) - 250, 50);
+				if (pos[v.in].queue[i].image)
+				{	
+					blit(pos[v.in].queue[i].image, (WIN_WIDTH / 2) - 250, 50);
+				}
 			}		
 		}
 	} 
@@ -507,8 +579,8 @@ char buffer[20];
 static void
 data_init(void)
 {
-	
 	y = 170;	
+	// sets the data inside the buffer into 0 to clear it out
 	memset(buffer, 0, sizeof(char) * 20);
 
 	if (v.in < v.count)
@@ -517,6 +589,7 @@ data_init(void)
 		{
 	
 			d.candidate_name[i] = gui_create_text(pos[v.in].queue[i].name, DEFAULT_FONT, 30, 0, 0, 0, 255, (WIN_WIDTH / 2) - 500, y); 
+			// stores the integers in a string
 			snprintf(buffer, sizeof(buffer), "%d", pos[v.in].queue[i].votes);
 			d.vote_count[i] = gui_create_text(buffer, DEFAULT_FONT, 30, 0, 0, 155, 255, (WIN_WIDTH / 2) + 412, y);
 			y += 50;
@@ -548,8 +621,8 @@ data(void)
 		gui_render_text(d.label[k]);
 	}
 
-	gui_render_button(gui_state, &d.next);
-	gui_render_button(gui_state, &d.back);
+	gui_render_button(&gui_state, &d.next);
+	gui_render_button(&gui_state, &d.back);
 }
 
 static void
@@ -571,6 +644,8 @@ data_back(void)
 		data_init();
 	}	
 }
+
+
 static void
 server_browser_init(void)
 {
@@ -583,10 +658,30 @@ server_browser(void)
 	gui_draw_rect(m.buttons[0].clicked, 0, 100, 0, 50, WIN_WIDTH / 2, WIN_HEIGHT / 2, 400, 400);
 }
 
+static user_t
+user_init(void)
+{
+	
+}
+
+static void
+enter_username(void)
+{
+	
+}
+
 static void
 enter_pass(void)
 {
-			
+					
+}
+
+static void
+confirmation_screen(void)
+{
+	gui_render_text(mini_title);
+	
+
 }
 
 text_box_t saved_files_text;
@@ -600,10 +695,10 @@ admin_init(void)
 	char *remove = "REMOVE -";
 	char *modify = "MODIFY";
 
-	a.in = 0;
+	a.in = -1;
 	//pos[0].gap = 100;
 	//outer_button_gap = 100;
-	a.count = 0;
+	v.count = 0;
 
 	a.label[0] = gui_create_text("POSITION" , DEFAULT_FONT, 20, 0, 0, 0, 255, (WIN_WIDTH / 2) - 550, (WIN_HEIGHT / 2) - 300);
 	a.label[1] = gui_create_text("CANDIDATE" , DEFAULT_FONT, 20, 0, 0, 0, 255, (WIN_WIDTH / 2) - 100, (WIN_HEIGHT / 2) - 300);
@@ -634,27 +729,27 @@ admin_init(void)
 static void
 admin(void)
 {
-	gui_draw_rect(true, 0, 100, 0, 200, (WIN_WIDTH / 2) - 300, (WIN_HEIGHT / 2) - 320, (WIN_WIDTH / 2) - 100, WIN_HEIGHT);
-	gui_render_text(mini_title);
-	gui_render_text(m.texts[2]);
 
+	gui_render_text(mini_title);
+	gui_draw_rect(true, 0, 100, 0, 200, (WIN_WIDTH / 2) - 300, (WIN_HEIGHT / 2) - 320, (WIN_WIDTH / 2) - 100, WIN_HEIGHT);
+	//gui_render_text(mini_title);
+	gui_render_text(m.texts[2]);
+	
 	for (int i = 0; i < 2; i++)
 	{
 		gui_render_text(a.label[i]);
-		gui_render_button(gui_state, &a.create[i]);
-		gui_render_button(gui_state, &a.remove[i]);
-		gui_render_button(gui_state, &a.modify[i]);
+		gui_render_button(&gui_state, &a.create[i]);
+		gui_render_button(&gui_state, &a.remove[i]);
+		gui_render_button(&gui_state, &a.modify[i]);
 	}
-	
-	gui_render_button(gui_state, &a.file);
-	gui_render_button(gui_state, &a.edit);
-	gui_render_button(gui_state, &a.help);
 
-	for (int i = 0; i < a.in; i++)
+	gui_render_button(&gui_state, &a.file);
+	gui_render_button(&gui_state, &a.edit);
+	gui_render_button(&gui_state, &a.help);
+
+	for (int i = 0; i < 7; i++)
 	{
-		gui_render_button(gui_state, &pos[i].button);
-		
-		
+		gui_render_button(&gui_state, &pos[i].button);
 	}
 
 	if (a.tool_state[0] == true)
@@ -663,7 +758,7 @@ admin(void)
 		gui_draw_rect(a.tool_state[0], 20, 20, 20, 150, (WIN_WIDTH / 2) - 655, (WIN_HEIGHT / 2) - 320, 200, (WIN_HEIGHT / 2) - 100);
 		for (int i = 0; i < 4; i++)
 		{
-			gui_render_button(gui_state, &a.file_buttons[i]);
+			gui_render_button(&gui_state, &a.file_buttons[i]);
 		}
 	} 
 
@@ -676,7 +771,6 @@ admin(void)
 	{
 		gui_render_input_text(&gui_state, &a.input[0], a.input_state[0]);
 	}	
-	
 }
 
 static void
@@ -689,32 +783,38 @@ close_admin(void)
 static void
 select_position(void)
 {
-	for (int i = 0; i < a.count; i++)
+	for (int i = 0; i < v.count; i++)
 	{
 		button_t *btn = &pos[i].button;
-		
 		if (btn->clicked)
 		{
-			for (int k = 0; k < a.count; k++)
+			selected_pos = i;
+			for (int k = 0; k < v.count; k++)
 			{
 				pos[k].current = false;
-				pos[k].button.hover_color = (SDL_Color) {0, 155, 0, 255};
-				pos[k].button.main_color = (SDL_Color) {0, 100, 0, 255};
-			}
+				pos[k].button.hover_color = (SDL_Color){0, 155, 0, 255};
+				pos[k].button.main_color = (SDL_Color){0, 100, 0, 255};
+			}	
 
-			pos[i].current = true;
-			
-			if (pos[i].current == true)
+			pos[selected_pos].current = true;
+
+			if (pos[selected_pos].current)
 			{
-				printf("%s\n", pos[i].title);
-				pos[i].button.main_color = (SDL_Color) {0, 155, 0, 255};	
+				pos[selected_pos].button.main_color = (SDL_Color){0, 155, 0, 255};
+				a.pos_state = true;
+				printf("selected position index: %d\n", selected_pos);
+				if (pos[selected_pos].title)
+					printf("Selected position %s\n", pos[selected_pos].title);
+				else
+					printf("Selected position has no name\n");
 			}
-		}
+		
+		}	
 	}
 }
 
 static void
-add_position_button(void)
+add_position_button(void) 
 {
 	a.input_state[0] = true;
 	text_input_state = false;
@@ -722,20 +822,49 @@ add_position_button(void)
 }
 
 static void
-add_position(void)
+add_candidate_button(void) 
 {
-	pos[a.in] = create_position(gui_state.buf);
-	a.in++;	
+	a.input_state[1] = true;
+	text_input_state = false;
+	gui_state.buf[0] = '\0';
 }
 
+/*
+static void
+enable_add_position(void)
+{
+	pos_state = true;
+}
+*/
+
+static void
+add_position(void)
+{
+	if (v.count >= MAX_POSITION)
+	{
+		printf("Cannot add position: maximum reached (%d)\n", MAX_POSITION);		
+	}
+
+	pos[v.count] = create_position(gui_state.buf);
+}
+
+static void
+free_position(void)
+{
+
+}
+
+/*
 static void
 add_candidate_button(void)
 {
 	if (a.pos_state == true)
 	{
-				
+		
+		a.pos_state = false;
 	}
 }
+*/
 
 static void
 file_state_button(void)
